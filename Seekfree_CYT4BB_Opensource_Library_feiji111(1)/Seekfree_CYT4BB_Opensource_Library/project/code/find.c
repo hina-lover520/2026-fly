@@ -1,0 +1,689 @@
+/*
+ * find.c
+ *                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+ *  Created on: 2025��4��26��
+ *      Author: 39653
+ */
+#include "find.h"
+#include "image.h"
+#include "string.h"
+#include "zf_device_mt9v03x.h"
+#include "globals.h"
+uint8 mt9v03x_image_BandW[MT9V03X_H][MT9V03X_W];
+uint8 display_image[MT9V03X_H][MT9V03X_W];
+uint8_t labelBuffer[MT9V03X_W*MT9V03X_H]={0};//��Ǿ���
+float QQQQ;
+float count19;
+float count20;
+float count21;
+
+float screen_x;
+float screen_y;
+int why;
+int xx=0;//��¼X����
+int yy=0;//��¼������
+void Set_image_twovalues(uint8 value)   ////���ö�ֵ������ֵ��
+{
+    for(uint8 i=0;i<MT9V03X_H;i++)
+    {
+
+        for(uint8 j=0;j<MT9V03X_W;j++)
+        {
+
+                 // ��ֵ������
+                  mt9v03x_image_BandW[i][j] = (mt9v03x_image[i][j] >= value) ? 1 : 0;
+}
+}
+                  //erosion_operation(mt9v03x_image_BandW);//��ʴһ��
+                  //PENGZHANG_operation(mt9v03x_image_BandW);
+                 // ת��Ϊ��ʾ��ʽ
+      for(uint8 l=0;l<MT9V03X_H;l++)
+        {
+           for(uint8 k=0;k<MT9V03X_W;k++)
+              {
+                  display_image[l][k] = mt9v03x_image_BandW[l][k] * 255;
+              }
+        }
+}
+
+volatile uint8_t dotcnt=0;
+volatile uint8_t dotlie[188];//����Ҫ�����������Ļ���Ұ׵���У��������û�쵽�׵�ͻ�ʧ��
+volatile uint8_t dothang[120];//ͬ��
+volatile short sumlie=0,sumhang=0;
+
+
+void Seek_Beacon ()//�ҵƳ���
+{
+  uint8_t tm=0;
+  uint8_t nr=0; //��
+  uint8_t nc=0; //��
+
+  dotcnt=0;
+  for (nr = 1; nr <MT9V03X_H - 1; nr++)
+  {
+    for (nc = 1; nc <MT9V03X_W - 1; nc++)
+    {
+      // 188*120�ֱ����£������������׵㣬����Ϊ�ǿ��ܵ��ű��
+      if ((mt9v03x_image_BandW[nr - 1][nc] +mt9v03x_image_BandW[nr + 1][nc] +mt9v03x_image_BandW[nr][nc + 1] + mt9v03x_image_BandW[nr][nc - 1] > 1))
+      {
+        dothang[dotcnt]=nr;     // ��¼���еİ׵�ˮƽ����λ��Ҳ��������ƫ��
+        dotlie[dotcnt++]=nc;    // ��¼���еİ׵�ˮ��ֱ��λ��Ҳ����Զ��
+      }
+    }
+  }
+  if(dotcnt) // �����аװ�
+  {
+    sumlie=0,sumhang=0;         // ����ϴεĽ��
+    for(tm=0;tm<dotcnt;tm++)
+    {
+      sumlie+=dotlie[tm];     // ���а׵�����ƫ��ֵ���
+      sumhang+=dothang[tm];   // ���а׵�����ƫ��ֵ��ͣ���ʱû�õ�
+    }
+    sumlie =sumlie/dotcnt;      // �Ƶ��������ĵ�
+    sumhang=sumhang/dotcnt;     // �Ƶ�Զ�����ĵ㣬��ʱû�õ�
+  }
+
+  ips200_draw_line(0,sumhang,188,sumhang,RGB565_RED);
+  ips200_draw_line(sumlie,0,sumlie,120,RGB565_RED);
+
+  int8_t comparative=MT9V03X_W/2-sumlie;
+  //ips200_show_int(150,150,sumhang,8);
+  ips200_show_int(150,150,comparative,8);
+  return;
+}
+
+
+
+int16_t OFFSET0;    // ��Զ������������ֵ�ۺ�ƫ����
+int16_t OFFSET1;    // �ڶ���
+int16_t OFFSET2;    // �����������
+int area_map[256]={0};
+
+
+/*****************************************************************************
+*�������ƣ�void SearchNeighbor_4(unsigned char *bitmap, unsigned char *labelmap,uint16 labelIndex,uint16 pixelIndex, Queue *queue)
+*����˵��������������������һ�����ӵ㣨pixelIndex����������������������ĸ��������أ����������������ؼ��뵱ǰ��ͨ�򣬲��ö��й������������أ�
+*       �����ڶ�ֵͼ�񣨺ڰ�ͼ�����ҳ�������ͨ�İ�ɫ����Ŀ�꣩��������ÿ����ͨ������������λ�ú������ܺ�
+*����˵����bitmap:�����ͼ��  labelmap:��Ǿ���
+*�������أ���
+*�޸�ʱ�䣺2022��4��3��
+*��    ע��
+******************************************************************************/
+uint16_t area;//记录连通域的目标连通域大小
+int Connected_x[256];// 记录每个连通域的x坐标总和
+int Connected_y[256];// 记录每个连通域的y坐标总和
+short Connected_xmin[256];//最小行列数
+short Connected_ymin[256];//最小行数
+short Connected_xmax[256];//最大列数
+short Connected_ymax[256];//最大行数
+int32_t Connected_light[256];//累计连通域内所有像素的亮度值，用于计算平均亮度。
+
+//����������
+static int NeighborDirection[4][2] = {{0,1},{1,0},{0,-1},{-1,0}};  //�������ƫ�������ҡ��¡����ϣ�
+void SearchNeighbor_4(unsigned char *bitmap,
+                        unsigned char *labelmap,
+                        uint16_t labelIndex,
+                        int pixelIndex,
+                        Queue *queue,
+                        int x, int y,
+                        unsigned char *lightmap)
+{
+  int searchIndex, i, length;
+  int qx, qy;
+  int curCol;       // 当前像素的列坐标，用于边界检查
+  int neighborCol;  // 邻居像素的列坐标
+
+  labelmap[pixelIndex] = labelIndex;
+  length = MT9V03X_W * MT9V03X_H;
+  curCol = pixelIndex % MT9V03X_W;  // 计算当前像素所在的列
+
+  for (i = 0; i < 4; i++)
+  {
+    // ★ 关键修复：先检查列边界，防止左右邻居环绕到上一行/下一行
+    neighborCol = curCol + NeighborDirection[i][1];  // NeighborDirection[i][1] 是列偏移
+    if (neighborCol < 0 || neighborCol >= MT9V03X_W)
+    {
+      continue;  // 越过图像左右边界，跳过
+    }
+
+    // 计算一维索引
+    searchIndex = pixelIndex + NeighborDirection[i][0] * MT9V03X_W + NeighborDirection[i][1];
+
+    // 此时 searchIndex 的行边界检查仍然有效（防止上下越界）
+    if (searchIndex >= 0 && searchIndex < length
+        && bitmap[searchIndex] == 1
+        && labelmap[searchIndex] == 0)
+    {
+      labelmap[searchIndex] = labelIndex;
+      area++;
+
+      qy = searchIndex / MT9V03X_W;
+      qx = searchIndex % MT9V03X_W;
+
+      Connected_x[labelIndex] += qx;
+      Connected_y[labelIndex] += qy;
+      Connected_light[labelIndex] += lightmap[searchIndex];
+
+      if (area >= 65535)
+      {
+        area = 65535;
+        break;
+      }
+      PushQueue(queue, searchIndex);
+    }
+  }
+}
+
+
+/*****************************************************************************
+*�������ƣ�void ConnectedComponentLabeling(unsigned char *bitmap, unsigned char * labelmap)
+*����˵������ͨ�����,���ű���ж�
+*       �����ڶ�ֵͼ����ʶ�𲢱�����ж�������ͨ����Ŀ�꣩��ͬʱ����ÿ���������������������ƽ������
+*����˵����bitmap:�����ͼ��  labelmap:��Ǿ���
+*�������أ������ܵ��������
+*�޸�ʱ�䣺2022��4��3��
+*��    ע����
+*ʹ��˵����ֻ�����������鼴�ɣ�i��2��ʼ
+          area_map[i]Ϊÿ��������������
+          Connected_x[i],Connected_y[i],Ϊÿ���������������
+          Connected_light[i]��Ϊÿ�����������ƽ��ֵ
+******************************************************************************/
+//��Ƶ���ͨ�����ʮһ������
+uint16_t areamax=0;//最大连通域的目标连通域大小
+uint8_t labelmax=0,//最大连通域标签
+        labeldel[256]={0}, //标记连通域小于3的连通域标签
+        labelcount=0;  //总的连通域个数
+
+//bitmap:二值图像  labelmap:标记矩阵
+void ConnectedComponentLabeling(unsigned char *bitmap, unsigned char *labelmap)
+{
+  uint16_t i, j, labelIndex = 1, del = 0, x = 1;
+  int index, popIndex;
+  // ★ 关键修复：使用栈上的固定大小循环队列，不使用 malloc，避免堆耗尽卡死
+  Queue queue;
+  queue.head = 0;
+  queue.tail = 0;
+  queue.count = 0;
+
+  memset(labelmap, 0, MT9V03X_W * MT9V03X_H);
+  memset(labeldel, 0, sizeof(labeldel));
+  memset(area_map, 0, sizeof(area_map));
+  memset(Connected_x, 0, sizeof(Connected_x));
+  memset(Connected_y, 0, sizeof(Connected_y));
+  memset(Connected_light, 0, sizeof(Connected_light));
+  areamax = 0;
+  labelcount = 0;
+  labelmax = 1;
+  int flag_1;
+  int last_labelIndex = 0;
+
+  for (i = 1; i <= MT9V03X_H - 1; i++)
+  {
+    for (j = 1; j <= MT9V03X_W - 1; j++)
+    {
+      index = i * (MT9V03X_W) + j;
+
+      if (bitmap[index] == 1 && labelmap[index] == 0)
+      {
+        labelIndex++;
+        SearchNeighbor_4(bitmap, labelmap, labelIndex, index, &queue, i, j, (unsigned char *)mt9v03x_image);
+        popIndex = PopQueue(&queue);
+        while (popIndex > -1)
+        {
+          SearchNeighbor_4(bitmap, labelmap, labelIndex, popIndex, &queue, i, j, (unsigned char *)mt9v03x_image);
+          popIndex = PopQueue(&queue);
+        }
+      }
+      flag_1 = labelIndex - last_labelIndex;
+      last_labelIndex = labelIndex;
+
+      if (flag_1 == 1)
+      {
+        area_map[labelIndex] = area;
+
+        Connected_x[labelIndex] = (int)(Connected_x[labelIndex] / area);
+        Connected_y[labelIndex] = (int)(Connected_y[labelIndex] / area);
+        //Connected_light[labelIndex] = (int)(Connected_light[labelIndex] / area);
+
+        flag_1 = 0;
+      }
+
+      if (x != labelIndex)
+      {
+        x = labelIndex;
+        if (area > areamax)
+        {
+          areamax = area;
+          labelmax = labelIndex;
+        }
+
+        if (area <= 5)
+        {
+          labeldel[del] = labelIndex;
+          del++;
+          if (del >= 9) del = 9;
+        }
+
+        area = 0;
+      }
+    }
+  }
+  // 不需要 free(queue) — 栈上分配，自动回收
+
+  labelcount = labelIndex - 1;
+}
+
+/********************************************
+����Ȩ���ж�
+        ���--�߶�      ����      ��״
+����  0~1500   0~120   0~255       0~
+���->С  �߶�->��  ���Ŷ�->��
+���->��  �߶�->��  ���Ŷ�->��
+
+����->��->���Ŷȸ�
+��״->��->���Ŷȸ�
+*********************************************/
+int quanzhi_weight[256];
+void quanzhong_light_panduan(void)
+{
+    float zz_return;
+    memset(quanzhi_weight,0,sizeof(quanzhi_weight));
+    for(int i=2;i<=labelcount+2;i++)
+    {
+        zz_return = Square_detection(Connected_x[i],Connected_y[i]);
+        if(zz_return<0.8||zz_return>1.2)//��������
+        {
+          
+            quanzhi_weight[i]=0;
+            continue;
+        }
+        if(((Connected_x[i]<30&&(Connected_y[i]<30||Connected_y[i]>100)) || (Connected_x[i]>130&&(Connected_y[i]<30||Connected_y[i]>100)))&&area_map[i]>10)//Զ��̫��
+        {
+            quanzhi_weight[i]=0;
+            continue;
+        }
+        if((Connected_x[i]>54&&Connected_x[i]<74&&Connected_y[i]>30&&Connected_y[i]<100 )&& area_map[i]<10)//����̫С
+        {
+            quanzhi_weight[i]=0;
+            continue;
+        }
+        //Ȩ��ֵԽ�����ű�Ƶĸ���Խ��
+        //120��1500Ϊ��ǰʹ�þ�ͷ�µĲ�������ͬ��ͷ��Ҫ�����޸�
+        //120Ϊͼ�����¸߶ȣ�1500Ϊͼ��Ĭ������¿��ܳ��ֵ�������
+      quanzhi_weight[i]= (int)(((1-(abs((int)Connected_x[i]-94)*1.0/94))+(1-(abs((int)Connected_y[i]-64)*1.0/64)))*100000+(area_map[i]*1.0/10000)*100000+Connected_light[i]+zz_return*100);
+ 
+    }
+
+}
+int center_x ; 
+int center_y ;
+//Ѱ�����Ȩ��ֵ
+int find_max(void)
+{
+    int wei=2;
+    int maxx=quanzhi_weight[2];
+    for(int i=3;i<=labelcount+2;i++)
+    {
+        if(quanzhi_weight[i]>maxx)
+        {
+            maxx = quanzhi_weight[i];
+            wei=i;
+            why = wei;
+        }
+    }
+     //����
+          
+          float screen_x = Connected_x[wei] * 128.0f / MT9V03X_W;
+          float screen_y = Connected_y[wei] * 81.0f / MT9V03X_H;
+          
+          center_x =Connected_x[wei]; 
+          center_y =Connected_y[wei];
+          //xx = (int)screen_x;
+          //yy = (int)screen_y;
+          
+           //ӳ�䵽Ŀ��ֱ��� (128��81)
+          //float screen_x = center_x[wei] * (128.0f / MT9V03X_W);
+          //float screen_y = center_y[wei] * (81.0f / MT9V03X_H);
+          //float screen_x = center_x[wei] * (127.0f / (MT9V03X_W - 1));  // ӳ�䵽0-127
+          //float screen_y = center_y[wei] * (81.0f / (MT9V03X_H - 1));   // ӳ�䵽0-81
+          //xx = (int)screen_x;
+          //yy = (int)screen_y;
+           xx = (int)screen_x;  // ��������
+           yy = (int)screen_y;
+          
+          //xx=(int)center_x[wei];
+          //yy=(int)center_y[wei];
+          
+          if(xx>=127)xx=127;
+          if(xx<=0)xx=0;
+          if(yy>=81)yy=81;
+          if(yy<=0)yy=0;
+    return wei;
+}
+
+float KKKK;
+
+
+
+
+//�������Ȩ��Ŀ��λ��
+/*void quanzhong_light(void)
+{
+    dotcnt=0;
+    int zxc=find_max();
+    int16_t comparative=MT9V03X_W/2-sumlie;
+                 //�̱�   ����
+    
+
+    if_look_light = 0;
+
+    if(quanzhi_weight[zxc]!=0)
+    {
+        QQQQ = 1;//����ת��ֵ��־
+
+        if_look_light = 1;//��������
+
+        keep_going = 70;//�ֶ���ʱ
+        eye_look_light = 1;
+        sumlie = Connected_y[zxc];
+        sumhang = Connected_x[zxc];
+        dotcnt++;
+        //move_k1 = 0.015;
+
+        target_turn = comparative ;
+if(sumhang >=80 )
+{
+
+    target_turn = 0 ;
+
+}
+
+
+
+        if (count19 ==1 )
+            {
+                count20 = 20 ;
+                count19 = 0 ;
+            }
+            else
+            {
+                count20 = 0 ;
+            }
+
+        if(target_turn <= 7 + count20 && target_turn >= -7 - count20 )
+        {
+
+            target_turn = 0;
+            count19 = 1;
+
+        }
+
+        ips200_show_int(150,130,target_turn,8);
+        if(target_turn  <= 25 && target_turn  >= -25 )//&& double_speed() <= 700)
+            {
+
+
+              target_turn = 0;
+              count21 ++ ;
+              if(count21 >= 80)
+              {
+
+              set_speed = 0;
+
+              }
+
+
+            }
+            else
+            {
+                count21 = 0;
+                set_speed = 0;
+            }
+
+    }
+
+    else
+    {
+      //  move_k1 = 0.015;
+        keep_going-- ;
+        if(keep_going <= 10)//��ʱ����ֹͣ
+        {
+           // qianhou_zhongzhi = 1.54;
+            set_speed = 0;
+            keep_going = 5;
+            if_turn = 1 ;
+        }
+        else if(keep_going > 10)//��ʱ���ڼ���ǰ��
+        {
+            //qianhou_zhongzhi = 3.0;
+            set_speed = 0 ;
+            if_turn = 0 ;
+        }
+
+        ips200_show_int(150,130,target_turn,8);
+
+        if (QQQQ == 1)  //��ֹ���ж�����ֵ����������ֻ����һ��,1,һ��ʼ�Ϳ����ƣ�Ȼ�󿴲�������1��0
+        {               //2,һ��ʼ���������ƣ�Ȼ�󿴼�����0��1
+        target_turn = 0 ;
+        QQQQ = 0 ;
+        }
+        eye_look_light = 2;//��ʾ��������
+    }
+}
+*/
+
+/*---------------------------------------------------------------
+����    ����Bin_Image_Filter
+����    �ܡ�������㣬���һ����ɫ���ر��϶�İ�ɫ���ذ�Χ�������������������Ϊ��ɫ���������Ϊ�����������ĺ�ɫ�����㡣
+         ���һ����ɫ���ر����ٵİ�ɫ���ذ�Χ�������������������Ϊ��ɫ���������Ϊ�����������İ�ɫ�����㡣
+����    ������
+���� �� ֵ����
+��ע�����
+----------------------------------------------------------------*/
+void Bin_Image_Filter (void)
+{
+  int  nr; //��
+  int  nc; //��
+
+  for (nr = 1; nr < MT9V03X_H - 1; nr++)
+  {
+    for (nc = 1; nc < MT9V03X_W- 1; nc = nc + 1)
+    {
+      if ((mt9v03x_image_BandW[nr][nc] == 0)
+          && (mt9v03x_image_BandW[nr - 1][nc] + mt9v03x_image_BandW[nr + 1][nc] + mt9v03x_image_BandW[nr][nc + 1] + mt9v03x_image_BandW[nr][nc - 1] > 2))
+      {
+          mt9v03x_image_BandW[nr][nc] = 1;
+      }
+      else if ((mt9v03x_image_BandW[nr][nc] == 1)
+               && (mt9v03x_image_BandW[nr - 1][nc] + mt9v03x_image_BandW[nr + 1][nc] + mt9v03x_image_BandW[nr][nc + 1] + mt9v03x_image_BandW[nr][nc - 1] < 2))
+      {
+          mt9v03x_image_BandW[nr][nc] = 0;
+      }
+    }
+  }
+}
+
+/*************************************************************************
+*  �������ƣ�void eye_show(void)
+*  ����˵�������ӻ�ʶ������ű�Ƶ�λ�ã�����ʾ��ʮ��׼��
+*  ����˵������
+*  �������أ���
+*  �޸�ʱ�䣺2022��3��31��
+*  ��    ע��  Bin_Image[LCDH][LCDW]; ��ֵ����ͼ������
+*************************************************************************/
+void eye_show (void)//��ʾʮ��
+{
+  for(int i = 1 ;i<MT9V03X_H-1;i++)
+  {
+      mt9v03x_image_BandW[i][sumlie] = 1;
+  }
+  for(int i = 1 ;i<MT9V03X_W-1;i++)
+  {
+      mt9v03x_image_BandW[sumhang][i] = 1;
+  }
+    return;
+}
+
+/**************************************************************************
+*                                                                          *
+*  �������ƣ�Seek_Road(void)                                                   *
+*  ����˵����Ѱ�Ұ�ɫ����ƫ��ֵ                                                      *
+*  ����˵������                                                            *
+*  �������أ�ֵ�Ĵ�С                                                      *
+*  �޸�ʱ�䣺2017-07-16                                                    *
+*  ��    ע�����м�Ϊ0������һ���Ҳ��һ����ֵ����1�����                            *
+*            ��������ӵ�һ�п�ʼ�������ڶ��н�����                                 *
+*            ������Ϊ��������ֵԽ��˵��Խƫ��ߣ�                                  *
+*            ������Ϊ��������ֵԽ��˵��Խƫ�ұߡ�                                  *
+**************************************************************************/
+void Seek_Road (void)
+{
+    int16_t nr; //��
+    int16_t nc; //��
+    int16_t temp = 0; //��ʱ��ֵ
+    //for(nr=1; nr<MAX_ROW-1; nr++)
+    temp = 0;
+    int16 MAX_COL=MT9V03X_W;   //�Լ�д�ģ��п����д�
+    for (nr = 8; nr < 40; nr++)
+    {
+        for (nc = MAX_COL / 2; nc < MAX_COL; nc = nc + 1)
+        {
+            if (mt9v03x_image_BandW[nr][nc])
+            {
+                ++temp;
+            }
+        }
+        for (nc = 0; nc < MAX_COL / 2; nc = nc + 1)
+        {
+            if (mt9v03x_image_BandW[nr][nc])
+            {
+                --temp;
+            }
+        }
+    }
+    OFFSET0 = temp;
+    temp = 0;
+    for (nr = 40; nr < 80; nr++)
+    {
+        for (nc = MAX_COL / 2; nc < MAX_COL; nc = nc + 1)
+        {
+            if (mt9v03x_image_BandW[nr][nc])
+            {
+                ++temp;
+            }
+        }
+        for (nc = 0; nc < MAX_COL / 2; nc = nc + 1)
+        {
+            if (mt9v03x_image_BandW[nr][nc])
+            {
+                --temp;
+            }
+        }
+    }
+    OFFSET1 = temp;
+    temp = 0;
+    for (nr = 80; nr < 110; nr++)
+    {
+        for (nc = MAX_COL / 2; nc < MAX_COL; nc = nc + 1)
+        {
+            if (mt9v03x_image_BandW[nr][nc])
+            {
+                ++temp;
+            }
+        }
+        for (nc = 0; nc < MAX_COL / 2; nc = nc + 1)
+        {
+            if (mt9v03x_image_BandW[nr][nc])
+            {
+                --temp;
+            }
+        }
+    }
+    OFFSET2 = temp;
+    return;
+}
+
+/*****************************************************************************
+*函数名称：void PushQueue(Queue *queue, int data)
+*功能说明：入队（固定大小循环数组，O(1)，无 malloc）
+*参数说明：queue: 队列指针  data: 入队数据
+*返回值：  无
+*修改时间：2026年7月7日
+*备    注：队列满时静默丢弃，避免堆耗尽导致卡死
+******************************************************************************/
+void PushQueue(Queue *queue, int data)
+{
+    if (queue->count >= QUEUE_MAX_SIZE) {
+        return;  // 队列满，丢弃（嵌入式安全策略）
+    }
+    queue->data[queue->tail] = data;
+    queue->tail = (queue->tail + 1) % QUEUE_MAX_SIZE;
+    queue->count++;
+}
+//
+/*****************************************************************************
+*函数名称：int PopQueue(Queue *queue)
+*功能说明：出队（固定大小循环数组，O(1)，无 free）
+*参数说明：queue: 队列指针
+*返回值：  队首元素值，队列空时返回 -1
+*修改时间：2026年7月7日
+*备    注：无动态内存，不会因 free 失败导致卡死
+******************************************************************************/
+int PopQueue(Queue *queue)
+{
+    if (queue->count == 0) {
+        return -1;  // 队列空
+    }
+    int data = queue->data[queue->head];
+    queue->head = (queue->head + 1) % QUEUE_MAX_SIZE;
+    queue->count--;
+    return data;
+}
+
+
+/*************************************************************************
+*  �������ƣ�float Square_detection (int x,int y)
+*  ����˵������Ŀ����м򵥵ĳ����ж�
+*  ����˵������
+*  �������أ���
+*  �޸�ʱ�䣺2022��7��11��
+*  ��    ע��  mt9v03x_image_BandW[MT9V03X_H][MT9V03X_W]; ��ֵ����ͼ������
+*************************************************************************/
+uint8_t shang=0,xia=0,zuo=0,you=0;
+float Square_detection(int16_t x,int16_t y)
+{
+   // uint8_t tm=0;
+    int16_t nr=y; //��
+    int16_t nc=x; //��
+    shang=0,xia=0,zuo=0,you=0;  //��������
+    dotcnt=0;
+
+if(nr>3&&nr<116&&nc>3&&nc<184){         //��ֹ�ӳ�ͼƬ��Χ�����Ұָ��
+    if((mt9v03x_image_BandW[nr][nc] == 1) || (mt9v03x_image_BandW[nr + 1][nc] + mt9v03x_image_BandW[nr + 3][nc]+ mt9v03x_image_BandW[nr - 1][nc] +mt9v03x_image_BandW[nr - 3][nc] +
+      mt9v03x_image_BandW[nr][nc + 1] +mt9v03x_image_BandW[nr][nc + 3]+mt9v03x_image_BandW[nr][nc -3] +mt9v03x_image_BandW[nr][nc - 1] >= 4) )
+    {
+        while (mt9v03x_image_BandW[nr - shang][nc] ==1)
+        {
+            shang++;
+        }
+        while (mt9v03x_image_BandW[nr + xia][nc] == 1)
+        {
+            xia++;
+        }
+        while (mt9v03x_image_BandW[nr][nc - zuo] == 1)
+        {
+            zuo++;
+        }
+        while (mt9v03x_image_BandW[nr][nc + you] == 1)
+        {
+            you++;
+        }
+        //�󳤿�����
+        return (abs(zuo+you)/2.0) / (abs(shang+xia)/2.0);
+
+    }
+    else return (0);
+}
+else return (0);
+}
+
